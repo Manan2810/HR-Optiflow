@@ -84,7 +84,7 @@ def upload_file():
 
         subject = "CV Upload Notification"
         sender_email = params['gmail-user']
-        recipient_email = "example@gmail.com"  # Replace with the recipient's email
+        recipient_email = "kaumudihuria2002@gmail.com"  # Replace with the recipient's email
         message_body = "Your CV has been uploaded successfully."
 
         msg = Message(subject=subject,
