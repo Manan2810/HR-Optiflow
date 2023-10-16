@@ -8,12 +8,30 @@ from candidate_processing import Candidate, generate_screening_questions, calcul
 import mysql.connector
 from flask import send_from_directory
 import plotly.graph_objs as go
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
 # Load configuration parameters from config.json
-with open("config.json", "r") as c:
+with open("/Users/mananmehra/Desktop/HR Optiflow/config.json", "r") as c:
     params = json.load(c)["params"]
+    
+
+local_server=True   
 
 app = Flask(__name__)
+
+if (local_server):
+    app.config["SQLALCHEMY_DATABASE_URI"] = params['local_uri']
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = params['prod_uri']
+    
+db = SQLAlchemy(app)
+
+class Candidate(db.Model):
+    sno = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50),nullable=False)
+    email=db.Column(db.String(50), nullable=False)
+    position=db.Column(db.String(50), nullable=False)
 
 cv_data=[]
 
@@ -36,7 +54,7 @@ interview_duration = 60
 def record_video(duration):
     cap = cv2.VideoCapture(0)  # Open the default camera (0)
     codec = cv2.VideoWriter_fourcc(*'XVID')
-    output_file = 'interview_video.avi'
+    output_file = 'interview_video.mov'
     out = cv2.VideoWriter(output_file, codec, 30, (640, 480))
 
     start_time = time.time()
@@ -52,7 +70,7 @@ def record_video(duration):
     cv2.destroyAllWindows()
     return output_file
 
-@app.route('/')
+@app.route('/',methods=['GET','POST'])
 def home():
     return render_template('index.html')
 
@@ -67,11 +85,11 @@ def upload_file():
     candidate_position = request.form.get('candidate_position')  # Get the candidate's position
     
     cv_data.append({
-            "name": candidate_name,
-            "email": candidate_email,
-            "position": candidate_position,
-            "filename": file.filename,
-        })
+        "name": candidate_name,
+        "email": candidate_email,
+        "position": candidate_position,
+        "filename": file.filename,
+    })
 
     if file.filename == '' or not all([candidate_name, candidate_email, candidate_position]):
         return redirect(request.url)
@@ -80,11 +98,17 @@ def upload_file():
         filename = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filename)
 
+        # Save candidate information to the database
+        if request.method == 'POST':
+            entry = Candidate(name=candidate_name, email=candidate_email, position=candidate_position)
+            db.session.add(entry)
+            db.session.commit()
+
         recorded_video = record_video(interview_duration)
 
         subject = "CV Upload Notification"
         sender_email = params['gmail-user']
-        recipient_email = "kaumudihuria2002@gmail.com"  # Replace with the recipient's email
+        recipient_email = "name@gmail.com"  # Replace with the recipient's email
         message_body = "Your CV has been uploaded successfully."
 
         msg = Message(subject=subject,
@@ -92,20 +116,6 @@ def upload_file():
                       recipients=[recipient_email])
         msg.body = message_body
         mail.send(msg)
-
-        # candidate = Candidate(candidate_name, job_description_match_score, cv_match_score)
-        # questions = generate_screening_questions(candidate)
-
-        # Add the uploaded CV data to the cv_data list
-        # cv_data.append({
-        #     "name": candidate_name,
-        #     "email": candidate_email,
-        #     "position": candidate_position,
-        #     "filename": file.filename,
-        # })
-
-        # response = "<br>".join(questions)
-        # return response
     return redirect(url_for('home'))
 
 @app.route('/job')
