@@ -10,6 +10,9 @@ from flask import send_from_directory
 import plotly.graph_objs as go
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from flask import flash
+from ExtractingWordsVideo import extract_keywords_from_text,calculate_percentage_of_matches_ques1,calculate_percentage_of_matches_ques2,extract_words_from_audio,question1,question2,audio_path_Ques1,audio_path_Ques2
+from wordExtraction import extract_text_from_pdf,extract_words_from_text1,calculate_percentage_of_matches,all_keywords
 
 # Load configuration parameters from config.json
 with open("/Users/mananmehra/Desktop/HR Optiflow/config.json", "r") as c:
@@ -19,6 +22,7 @@ with open("/Users/mananmehra/Desktop/HR Optiflow/config.json", "r") as c:
 local_server=True   
 
 app = Flask(__name__)
+app.secret_key = 'ABCD124'
 
 if (local_server):
     app.config["SQLALCHEMY_DATABASE_URI"] = params['local_uri']
@@ -32,6 +36,10 @@ class Candidate(db.Model):
     name = db.Column(db.String(50),nullable=False)
     email=db.Column(db.String(50), nullable=False)
     position=db.Column(db.String(50), nullable=False)
+    selected=db.Column(db.String(20),nullable=True)
+
+USERNAME = 'mehravirgo@gmail.com'
+PASSWORD = 'Sabina@1976'
 
 cv_data=[]
 
@@ -51,10 +59,23 @@ mail = Mail(app)
 interview_duration = 60
 
 # Function to record a video for the specified duration
+import os
+from datetime import datetime
+
 def record_video(duration):
     cap = cv2.VideoCapture(0)  # Open the default camera (0)
     codec = cv2.VideoWriter_fourcc(*'XVID')
-    output_file = 'interview_video.mov'
+
+    output_folder = '/Users/mananmehra/Desktop/HR Optiflow/audio_videos'
+
+    # Ensure the output folder exists, create it if not
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    # Generate a unique filename based on the current timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(output_folder, f'interview_video_{timestamp}.mov')
+
     out = cv2.VideoWriter(output_file, codec, 30, (640, 480))
 
     start_time = time.time()
@@ -70,7 +91,7 @@ def record_video(duration):
     cv2.destroyAllWindows()
     return output_file
 
-@app.route('/',methods=['GET','POST'])
+@app.route('/')
 def home():
     return render_template('index.html')
 
@@ -108,7 +129,7 @@ def upload_file():
 
         subject = "CV Upload Notification"
         sender_email = params['gmail-user']
-        recipient_email = "name@gmail.com"  # Replace with the recipient's email
+        recipient_email = "mumehra2827@gmail.com"  # Replace with the recipient's email
         message_body = "Your CV has been uploaded successfully."
 
         msg = Message(subject=subject,
@@ -122,19 +143,77 @@ def upload_file():
 def job():
     return render_template('job.html')
 
-@app.route('/hr')
-def hr():
-    return render_template('hr.html')
+@app.route('/login',methods=['POST','GET'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        if username == USERNAME and password == PASSWORD:
+            flash('Login successful!', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Login unsuccessful. Please check your username and password.', 'danger')
+
+    return render_template('login.html')
 
 @app.route('/pro')
 def pro():
     return render_template('pro.html')
 
-@app.route('/dashboard')
+@app.route('/calculate_result', methods=['GET', 'POST'])
+def calculate_result():
+    if request.method == 'POST':
+        # Get user input from the form
+        name = request.form.get('name')
+        email = request.form.get('email')
+
+        # Perform the necessary calculations based on the input
+        # You can use the existing functions or create new ones
+
+        # Example: Calculate percentage for question 1
+        result1 = extract_words_from_audio(audio_path_Ques1)
+        keywords_result1 = extract_keywords_from_text(result1)
+        percentage_Ques1 = calculate_percentage_of_matches_ques1(keywords_result1, question1)
+
+        # Example: Calculate percentage for question 2
+        result2 = extract_words_from_audio(audio_path_Ques2)
+        keywords_result2 = extract_keywords_from_text(result2)
+        percentage_Ques2 = calculate_percentage_of_matches_ques2(keywords_result2, question2)
+        
+        # Example: Calculate result of resume
+        pdf_path = '/Users/mananmehra/Desktop/HR Optiflow/uploads/manan_cv.pdf'
+        extracted_text = extract_text_from_pdf(pdf_path)
+        extracted_words = extract_words_from_text1(extracted_text)
+        print("Extracted Words from Resume:", extracted_words)
+        percentage_resume = calculate_percentage_of_matches(extracted_words, all_keywords)
+        print("Percentage for Resume:", percentage_resume)
+        total_percentage = percentage_Ques1 + percentage_Ques2 + percentage_resume
+        selected = total_percentage > 10
+
+        # Update the database or perform other actions based on the result
+        # Example: Update the database
+        if selected:
+            selected_candidate = Candidate.query.filter_by(email=email).first()
+            if selected_candidate:
+                # Update the candidate's selection status in the database
+                selected_candidate.selected = 'Yes'  # Change to whatever indicator you prefer
+                db.session.commit()
+
+        # Redirect to the dashboard or another page with the result
+        return redirect(url_for('dashboard'))
+
+    return render_template('result.html')
+
+@app.route('/dashboard',methods=['POST','GET'])
 def dashboard():
-    enrolled_candidates = len(cv_data)
-    selected_candidates = 0# Replace with the actual number of selected candidates
-    not_selected_candidates = 0
+    # Query the database to get candidate information
+    
+    candidates = Candidate.query.all()
+
+    enrolled_candidates = len(candidates)
+    selected_candidates = Candidate.query.filter_by(selected='Yes').count()
+    not_selected_candidates = Candidate.query.filter_by(selected='No').count()  # You may need to modify this based on your selection criteria
 
     enrollment_selection_data = [
         go.Bar(
@@ -153,8 +232,7 @@ def dashboard():
     enrollment_selection_fig = go.Figure(data=enrollment_selection_data, layout=enrollment_selection_layout)
     enrollment_selection_graph = enrollment_selection_fig.to_html(full_html=False)
 
-    return render_template('dashboard.html', cv_data=cv_data, enrollment_selection_graph=enrollment_selection_graph)
-
+    return render_template('dashboard.html', candidates=candidates, enrollment_selection_graph=enrollment_selection_graph)
 
     # return render_template('dashboard.html', cv_data=cv_data)
 
