@@ -38,8 +38,8 @@ class Candidate(db.Model):
     position=db.Column(db.String(50), nullable=False)
     selected=db.Column(db.String(20),nullable=True)
 
-USERNAME = 'mehravirgo@gmail.com'
-PASSWORD = 'Sabina@1976'
+USERNAME = ''
+PASSWORD = ''
 
 cv_data=[]
 
@@ -129,7 +129,7 @@ def upload_file():
 
         subject = "CV Upload Notification"
         sender_email = params['gmail-user']
-        recipient_email = "mumehra2827@gmail.com"  # Replace with the recipient's email
+        recipient_email = ""  # Replace with the recipient's email
         message_body = "Your CV has been uploaded successfully."
 
         msg = Message(subject=subject,
