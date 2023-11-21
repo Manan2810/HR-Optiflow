@@ -4,7 +4,6 @@ from flask_mail import Mail, Message
 import json
 import time
 import cv2  # OpenCV for video recording
-from candidate_processing import Candidate, generate_screening_questions, calculate_similarity
 import mysql.connector
 from flask import send_from_directory
 import plotly.graph_objs as go
